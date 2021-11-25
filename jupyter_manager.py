@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 
 import os
+
+import psutil
+import multiprocessing
+from os.path import expanduser
+
 if os.environ.get("CONDA_DEFAULT_ENV", "") != "base":
     raise SystemError(f"Running from the incorrect conda environment. \'{os.environ.get('CONDA_DEFAULT_ENV', '')}\' instead of \'base\'.")
 
@@ -14,8 +19,41 @@ CONDA_ENVIRONMENT_NAME = "jupyter-env"
 CONDA_REQUIREMENTS = [
     "jupyter",
     "jupyterlab",
-    "nodejs"
+    "nodejs",
+    "jedi-language-server"
 ]
+PIP_REQUIREMENTS = [
+#    "jupyterlab_tabnine",
+    "jupyterlab-system-monitor",
+    "jupyterlab-git",
+    "jupyterlab-lsp",
+    "lckr-jupyterlab-variableinspector",
+    "nbdime",
+]
+OTHER_COMMANDS = []
+JUPYTERLAB_CONFIG_FILE = expanduser("~/.jupyter/jupyter_lab_config.py")
+
+
+JUPYTERLAB_ADDITIONAL_CONFIG = f"""
+c = get_config()
+
+# memory
+c.ResourceUseDisplay.mem_limit = {psutil.virtual_memory().total}
+
+# cpu
+c.ResourceUseDisplay.track_cpu_percent = True
+c.ResourceUseDisplay.cpu_limit = {multiprocessing.cpu_count()}
+
+c.LanguageServerManager.language_servers = {{
+    'jedi-language-server-custom': {{
+        'argv': ['jedi-language-server', '--log-file', '/tmp/jedi-language-server.log'],
+        'languages': ['python'],
+        'version': 2,
+        'mime_types': ['text/x-python'],
+        'display_name': 'Python Jedi'
+    }}
+}}
+"""
 
 
 @click.group()
@@ -34,6 +72,19 @@ def reset_env():
 
     click.secho("Installing the new environment.", fg='blue')
     run_command(Commands.CREATE, f"-n {CONDA_ENVIRONMENT_NAME}".split() + CONDA_REQUIREMENTS, stdout=sys.stdout)
+
+    click.secho("Adding the pip requirements.", fg='blue')
+    run_command(Commands.RUN, f"-n {CONDA_ENVIRONMENT_NAME} pip install".split() + PIP_REQUIREMENTS, stdout=sys.stdout)
+
+    click.secho("Running some final installation commands.", fg='blue')
+    for command in OTHER_COMMANDS:
+        run_command(Commands.RUN, f"-n {CONDA_ENVIRONMENT_NAME}".split() + command, stdout=sys.stdout)
+
+    click.secho("Create the jupyterlab config file.")
+    run_command(Commands.RUN, f'-n {CONDA_ENVIRONMENT_NAME} yes | jupyter lab -y --generate-config'.split())
+    with open(JUPYTERLAB_CONFIG_FILE, "a") as f:
+        f.write(JUPYTERLAB_ADDITIONAL_CONFIG)
+        click.echo(JUPYTERLAB_ADDITIONAL_CONFIG)
 
     click.secho("Finished.", fg='blue')
 
