@@ -29,12 +29,15 @@ PIP_REQUIREMENTS = [
     "jupyterlab-lsp",
     "lckr-jupyterlab-variableinspector",
     "nbdime",
+    "jupyter-fs",
+    "s3contents"
 ]
 OTHER_COMMANDS = []
-JUPYTERLAB_CONFIG_FILE = expanduser("~/.jupyter/jupyter_lab_config.py")
 
+JUPYTERLAB_CONFIG_FILE_PY = expanduser("~/.jupyter/jupyter_lab_config.py")
+JUPYTERLAB_CONFIG_FILE_JSON = expanduser("~/.jupyter/jupyter_lab_config.json")
 
-JUPYTERLAB_ADDITIONAL_CONFIG = f"""
+JUPYTERLAB_ADDITIONAL_CONFIG_PY = f"""
 c = get_config()
 
 # memory
@@ -53,6 +56,42 @@ c.LanguageServerManager.language_servers = {{
         'display_name': 'Python Jedi'
     }}
 }}
+
+from s3contents import S3ContentsManager
+c.JupyterFS.contents_managers ={{
+    's3': S3ContentsManager
+}}
+
+
+c.S3ContentsManager.bucket = 'leap-dev-emr'
+
+## SECRET
+c.S3ContentsManager.access_key_id = '{os.environ['AWS_ACCESS_KEY_ID']}'
+c.S3ContentsManager.secret_access_key = '{os.environ['AWS_SECRET_ACCESS_KEY']}'
+
+#c.MultiContentsManager.contents_managers ={{
+#    's3': S3ContentsManager,
+#    'file2': AbsolutePathFileManager(root_dir=os.path.expanduser('~/Downloads'))
+#}}
+"""
+
+JUPYTERLAB_ADDITIONAL_CONFIG_JSON = """
+{
+  \"ServerApp\": {
+    \"contents_manager_class\": \"jupyterfs.metamanager.MetaManager\",
+    \"jpserver_extensions\": {
+      \"jupyterfs.extension\": true
+    }
+  },
+  \"Jupyterfs\": {
+    \"resources\": [
+      {
+        \"name\": \"Downloads\",
+        \"url\": \"osfs:///Users/jeroen/Downloads\"
+      }
+    ]
+  }
+}
 """
 
 
@@ -80,11 +119,16 @@ def reset_env():
     for command in OTHER_COMMANDS:
         run_command(Commands.RUN, f"-n {CONDA_ENVIRONMENT_NAME}".split() + command, stdout=sys.stdout)
 
-    click.secho("Create the jupyterlab config file.")
+    click.secho("Create the jupyterlab config file.", fg='blue')
     run_command(Commands.RUN, f'-n {CONDA_ENVIRONMENT_NAME} yes | jupyter lab -y --generate-config'.split())
-    with open(JUPYTERLAB_CONFIG_FILE, "a") as f:
-        f.write(JUPYTERLAB_ADDITIONAL_CONFIG)
-        click.echo(JUPYTERLAB_ADDITIONAL_CONFIG)
+    with open(JUPYTERLAB_CONFIG_FILE_PY, "a") as f:
+        f.write(JUPYTERLAB_ADDITIONAL_CONFIG_PY)
+
+    click.secho("Create the jupyterlab json config file.", fg='blue')
+    if os.path.isfile(JUPYTERLAB_CONFIG_FILE_JSON):
+        os.remove(JUPYTERLAB_CONFIG_FILE_JSON)
+    with open(JUPYTERLAB_CONFIG_FILE_JSON, "w") as f:
+        f.write(JUPYTERLAB_ADDITIONAL_CONFIG_JSON)
 
     click.secho("Finished.", fg='blue')
 
